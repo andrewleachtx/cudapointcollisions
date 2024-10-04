@@ -1,0 +1,22 @@
+#include "utils.h"
+
+#define _USE_MATH_DEFINES
+#include <math.h>
+
+#include "../include.h"
+
+#include <memory>
+#include <iostream>
+#include <vector>
+#include <string>
+#include <random>
+
+#define GLM_FORCE_RADIANS
+#include <glm/glm.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
+using std::cout, std::endl, std::cerr;
+using std::shared_ptr, std::make_shared;
+using std::vector, std::string;
+
+const float FLOAT_EPS = 1e-8f;
