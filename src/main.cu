@@ -3,7 +3,6 @@
 #include "constants.h"
 
 #include <cuda_runtime.h>
-#include <cuda_gl_interop.h>
 #include <device_launch_parameters.h>
 
 #include <chrono>
@@ -14,7 +13,7 @@ using std::stoi, std::stoul, std::min, std::max, std::numeric_limits, std::abs;
 using glm::vec3, glm::vec4, glm::mat4;
 
 static size_t g_maxParticles;
-float g_curTime(0.0f), g_nextDisplayTime(1.0f);
+float g_curTime(0.0f);
 long long g_curStep(0);
 
 // Device Hyperparameters - Constant Space //
@@ -29,7 +28,6 @@ ParticleData g_particles;
 PlaneData g_planes;
 
 static void init() {
-    // srand(static_cast<unsigned int>(time(nullptr)));
     srand(0);
 
     // CUDA //

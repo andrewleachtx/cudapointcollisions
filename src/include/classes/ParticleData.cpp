@@ -18,17 +18,6 @@ __host__ __device__ ParticleData::ParticleData() : h_maxParticles(0) {
 }
 
 __host__ __device__ ParticleData::ParticleData(size_t max_particles) : h_maxParticles(max_particles) {
-    size_t memory_required = max_particles * sizeof(vec3) * 2 + max_particles * sizeof(float) * 2;
-    size_t free, total;
-    cudaMemGetInfo(&free, &total);
-    if (memory_required > free) {
-        std::cerr << "Error: Insufficient memory to allocate " << memory_required << " bytes on device" << std::endl;
-        exit(1);
-    } 
-    else {
-        std::cout << "Allocating " << memory_required << " of " << total << " bytes on device" << std::endl;
-    }
-
     size_t mem_required = max_particles * (2 * sizeof(vec3) + sizeof(float));
     size_t free, total;
     cudaMemGetInfo(&free, &total);
