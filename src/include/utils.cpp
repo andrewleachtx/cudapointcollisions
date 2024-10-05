@@ -19,4 +19,12 @@ using std::cout, std::endl, std::cerr;
 using std::shared_ptr, std::make_shared;
 using std::vector, std::string;
 
+float randFloat() {
+    return static_cast<float>(rand()) / RAND_MAX;
+};
+
+vec3 randXYZ() {
+    return vec3(randFloat(), randFloat(), randFloat());
+}
+
 const float FLOAT_EPS = 1e-8f;

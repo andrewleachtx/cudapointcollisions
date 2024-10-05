@@ -11,6 +11,9 @@
 #define RESTITUTION 0.85f
 #define BENCHMARK true
 #define STOP_VELOCITY 4.5f
+#define MAX_SIMULATE_TIME_SECONDS 500
+// Arbitrary, but usually we ended up with ~2.5mil
+#define KERNEL_TIMING_SAMPLESZ 1000000
 
 // Threading //
 #define NUM_THREADS 256

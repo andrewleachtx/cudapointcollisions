@@ -7,9 +7,9 @@ PROJECT(CUDAPARTICLESYSTEMS LANGUAGES CXX CUDA)
 
 # CUDA
 # https://stackoverflow.com/questions/13167598/error-cuda-runtime-h-no-such-file-or-directory/75559127#75559127
-find_package(CUDA REQUIRED)
+# find_package(CUDA REQUIRED)
 enable_language(CUDA)
-add_definitions(-DUSE_CUDA)
+# add_definitions(-DUSE_CUDA)
 include_directories("${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}")
 
 # set(CMAKE_CUDA_ARCHITECTURES 89)
@@ -32,7 +32,7 @@ ENDIF()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CUDA_STANDARD 17)
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --generate-line-info")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --generate-line-info --expt-relaxed-constexpr")
 
 # Set the executable.
 ADD_EXECUTABLE(${CMAKE_PROJECT_NAME} ${CPP_SOURCES} ${CUDA_SOURCES} ${HEADERS} ${GLSL})

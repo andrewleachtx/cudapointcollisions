@@ -11,9 +11,6 @@ using glm::vec3, glm::vec4;
 // Grabs from main.cu
 extern __constant__ size_t d_maxParticles;
 
-// FIXME: https://stackoverflow.com/questions/68328427/subtract-one-from-unsigned-long-long-variable-in-atomic-operation-in-cuda-kernel
-// extern __constant__ size_t d_activeParticles;
-
 __host__ __device__ ParticleData::ParticleData() : h_maxParticles(0) {
     d_position = nullptr;
     d_velocity = nullptr;
@@ -58,8 +55,6 @@ __host__ __device__ ParticleData::~ParticleData() {
 // Copies physics data from host to device (this should happen only once!)
 __host__ __device__ void ParticleData::copyToDevice() {
     gpuErrchk(cudaMemcpyToSymbol(&d_maxParticles, &h_maxParticles, sizeof(size_t)));
-    // FIXME:
-    // gpuErrchk(cudaMemcpyToSymbol(&d_activeParticles, &h_maxParticles, sizeof(size_t)));
 
     gpuErrchk(cudaMemcpy(d_position, h_position.data(), h_maxParticles * sizeof(vec3), cudaMemcpyHostToDevice));
     gpuErrchk(cudaMemcpy(d_velocity, h_velocity.data(), h_maxParticles * sizeof(vec3), cudaMemcpyHostToDevice));
@@ -72,7 +67,8 @@ void ParticleData::init(const float& radius) {
 
     h_position.resize(h_maxParticles);
     std::random_device rd;
-    std::mt19937 gen(rd());
+    // std::mt19937 gen(rd());
+    std::mt19937 gen(0);
     float minF(180.0f), maxF(240.0f);
     std::uniform_real_distribution<float> dist_pos(minF, maxF);
     std::uniform_real_distribution<float> dist_vel(-1.0f, 1.0f);
@@ -83,10 +79,11 @@ void ParticleData::init(const float& radius) {
         float rand_z(dist_pos(gen));
 
         x = vec3(rand_x - maxF, rand_y + minF, rand_z - maxF);
+        // cout << x.x << " " << x.y << " " << x.z << endl;
     }
 
     h_velocity.resize(h_maxParticles);
-    float push = 90.0f;
+    float push = 10.0f;
     for (vec3& v : h_velocity) {
         float rand_x = dist_vel(gen);
         float rand_y = dist_vel(gen);

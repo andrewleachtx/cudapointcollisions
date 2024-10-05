@@ -22,6 +22,11 @@ __inline __host__ void gpuAssert(cudaError_t code, char *file, int line,
    }
 }
 
+#define printvec3(var) pv3(#var, var)
+__inline __host__ __device__ void pv3(const char* varname, glm::vec3 vec) {
+    printf("%s: %f, %f, %f\n", varname, vec.x, vec.y, vec.z);
+}
+
 float randFloat();
 glm::vec3 randXYZ();
 

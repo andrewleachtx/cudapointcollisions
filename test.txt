@@ -1,0 +1,15 @@
+cmake --build build
+gmake[1]: Entering directory '/home/ugrads/a/andrewleachtx/code/cudapointcollisions/build'
+gmake[2]: Entering directory '/home/ugrads/a/andrewleachtx/code/cudapointcollisions/build'
+gmake[3]: Entering directory '/home/ugrads/a/andrewleachtx/code/cudapointcollisions/build'
+gmake[3]: Leaving directory '/home/ugrads/a/andrewleachtx/code/cudapointcollisions/build'
+[100%] Built target CUDAPARTICLESYSTEMS
+gmake[2]: Leaving directory '/home/ugrads/a/andrewleachtx/code/cudapointcollisions/build'
+gmake[1]: Leaving directory '/home/ugrads/a/andrewleachtx/code/cudapointcollisions/build'
+./build/CUDAPARTICLESYSTEMS 1000
+Allocating 28000 of 25393692672 bytes on device
+Destructor called 1 time(s) for this = 0x7ffdea5ca890
+Overall Kernel Time Out of 15 second "convergence" period: 0.139744 ms
+Average Kernel Time over 50 samples: 0.002795 ms
+Kernel Usage (overall kernel time / total program time): 0.000009
+Destructor called 1 time(s) for this = 0x5a1825bce480
