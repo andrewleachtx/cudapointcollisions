@@ -10,7 +10,6 @@
 using std::cout, std::cerr, std::endl;
 using std::vector, std::string, std::make_shared, std::shared_ptr;
 using std::stoi, std::stoul, std::min, std::max, std::numeric_limits, std::abs;
-using glm::vec3, glm::vec4, glm::mat4;
 
 static size_t g_maxParticles;
 float g_curTime(0.0f);
@@ -19,8 +18,8 @@ long long g_curStep(0);
 // Device Hyperparameters - Constant Space //
 __constant__ size_t d_maxParticles;
 __constant__ size_t d_numPlanes;
-__constant__ vec3 d_planeP[6];
-__constant__ vec3 d_planeN[6];
+__constant__ glm::vec3 d_planeP[6];
+__constant__ glm::vec3 d_planeN[6];
 
 bool g_is_simFrozen(true);
 
@@ -50,49 +49,50 @@ static void init() {
 */
 
 // Assume mass is 1; F / 1 = A
-__device__ vec3 getAcceleration(int idx, vec3* v) {
+__device__ glm::vec3 getAcceleration(int idx, glm::vec3* v) {
     float mass = 1.0f;
 
     // Simple force composed of gravity and air resistance
-    vec3 F_total = vec3(0.0f, GRAVITY, 0.0f) - ((AIR_FRICTION / mass) * v[idx]);
+    glm::vec3 F_total = glm::vec3(0.0f, GRAVITY, 0.0f) - ((AIR_FRICTION / mass) * v[idx]);
 
     return F_total;
 }
 
-__device__ void solveConstraints(int idx, const vec3* x, const vec3* v, const float* radii, 
-                                 vec3& x_new, vec3& v_new, float& dt, const vec3& a) {
+__device__ void solveConstraints(int idx, const glm::vec3* pos, const glm::vec3* vel, const float* radii, 
+                                 glm::vec3& x_new, glm::vec3& v_new, float& dt, const glm::vec3& a) {
     // Plane Collisions //
     for (int i = 0; i < d_numPlanes; i++) {
         // TODO: Move plane_p and plane_n to constant space
-        const vec3& p(d_planeP[i]), n(d_planeN[i]);
-        const vec3& x(x[idx]), v(v[idx]);
+        const glm::vec3& p(d_planeP[i]), n(d_planeN[i]);
+        const glm::vec3& x(pos[idx]), v(vel[idx]);
 
-        vec3 new_p = p + (radii[idx] * n);
-        float d_0 = dot((x - new_p), n);
-        float d_n = dot((x_new - new_p), n);
-        
-        vec3 v_tan = v - (dot(v, n) * n);
+        glm::vec3 new_p = p + (radii[idx] * n);
+
+        float d_0 = glm::dot((x - new_p), n);
+        float d_n = glm::dot(glm::vec3(x_new - new_p), n);
+
+        glm::vec3 v_tan = v - (glm::dot(v, n) * n);
         v_tan = (1 - FRICTION) * v_tan;
 
         if (d_n < FLOAT_EPS) {
             float f = d_0 / (d_0 - d_n);
             dt = f * dt;
 
-            vec3 v_collision = (v + (dt * a)) * RESTITUTION;    
-            vec3 x_collision = x;
+            glm::vec3 v_collision = (v + (dt * a)) * RESTITUTION;    
+            glm::vec3 x_collision = x;
 
             x_new = x_collision;
-            v_new = (abs(dot(v_collision, n)) * n) + (v_tan);
+            v_new = (abs(glm::dot(v_collision, n)) * n) + (v_tan);
 
             // Naive jitter handling (could also check to make sure acceleration opposite to normal)
-            if (abs(dot(v_new, n)) < STOP_VELOCITY) {
+            if (abs(glm::dot(v_new, n)) < STOP_VELOCITY) {
                 v_new = v_tan;
             }
         }
     }
 }
 
-__global__ void simulateKernel(vec3* positions, vec3* velocities, float* radii) {
+__global__ void simulateKernel(glm::vec3* positions, glm::vec3* velocities, float* radii) {
     /* To retrieve the index in this 1D instance, we do this: */
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     
@@ -108,12 +108,12 @@ __global__ void simulateKernel(vec3* positions, vec3* velocities, float* radii) 
     int max_iter = 10;
 
     while (max_iter && dt_remaining > 0.0f) {
-        const vec3& x_cur(positions[idx]), v_cur(velocities[idx]);
-        vec3 a = getAcceleration(idx, velocities);
+        const glm::vec3& x_cur(positions[idx]), v_cur(velocities[idx]);
+        glm::vec3 a = getAcceleration(idx, velocities);
 
         // Integrate over timestep to update
-        vec3 x_new = x_cur + (v_cur * dt);
-        vec3 v_new = v_cur + (a * dt);
+        glm::vec3 x_new = x_cur + (v_cur * dt);
+        glm::vec3 v_new = v_cur + (a * dt);
 
         // Solve any constraints imposed by update positions
         solveConstraints(idx, positions, velocities, radii, x_new, v_new, dt, a);
@@ -170,7 +170,7 @@ int main(int argc, char**argv) {
 
     // The renderFrozen variable is important, as it is flipped on window resize
     auto start = std::chrono::high_resolution_clock::now();
-    auto end = start + std::chrono::seconds(180);
+    auto end = start + std::chrono::seconds(10);
 
     while (std::chrono::high_resolution_clock::now() < end) {
         if (!g_is_simFrozen) {
@@ -179,13 +179,15 @@ int main(int argc, char**argv) {
     }
 
     // Print Timings //
-        if (BENCHMARK) {
-            if (g_timeSampleCt >= g_timeSampleSz) {
-                cout << "Average Kernel Time: " << g_totalKernelTimes / g_timeSampleSz << "ms" << endl;
-                cout << "g_TimeSampleCt = " << g_timeSampleCt << endl;
-            }
-
+    if (BENCHMARK) {
+        if (g_timeSampleCt >= g_timeSampleSz) {
+            cout << "Average Kernel Time: " << g_totalKernelTimes / g_timeSampleSz << "ms" << endl;
+            cout << "g_TimeSampleCt = " << g_timeSampleCt << endl;
         }
+        else {
+            cout << "g_timeSampleCt = " << g_timeSampleCt << endl;
+        }
+    }
 
     // CUDA Cleanup //
 

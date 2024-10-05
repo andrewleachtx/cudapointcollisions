@@ -2,10 +2,17 @@ cmake_minimum_required(VERSION 3.18)
 
 # Name of the project
 include(CheckLanguage)
-enable_language(CUDA)
+
 PROJECT(CUDAPARTICLESYSTEMS LANGUAGES CXX CUDA)
 
-set(CMAKE_CUDA_ARCHITECTURES 86)
+# CUDA
+# https://stackoverflow.com/questions/13167598/error-cuda-runtime-h-no-such-file-or-directory/75559127#75559127
+find_package(CUDA REQUIRED)
+enable_language(CUDA)
+add_definitions(-DUSE_CUDA)
+include_directories("${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}")
+
+# set(CMAKE_CUDA_ARCHITECTURES 89)
 set(CMAKE_VERBOSE_MAKEFILE OFF)
 
 # Use glob to get the list of all source files.
@@ -25,7 +32,7 @@ ENDIF()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CUDA_STANDARD 17)
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --generate-line-info -gencode arch=compute_86,code=sm_86")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --generate-line-info")
 
 # Set the executable.
 ADD_EXECUTABLE(${CMAKE_PROJECT_NAME} ${CPP_SOURCES} ${CUDA_SOURCES} ${HEADERS} ${GLSL})
@@ -136,6 +143,7 @@ ELSE()
         # TARGET_LINK_LIBRARIES(${CMAKE_PROJECT_NAME} "-framework OpenGL -framework Cocoa -framework IOKit -framework CoreVideo")
     ELSE()
         #Link the Linux OpenGL library
-        # TARGET_LINK_LIBRARIES(${CMAKE_PROJECT_NAME} "GL")
+        TARGET_LINK_LIBRARIES(${CMAKE_PROJECT_NAME} "GL")
     ENDIF()
 ENDIF()
+

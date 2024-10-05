@@ -9,7 +9,7 @@
 #define AIR_FRICTION 0.0f
 #define FRICTION 0.1f
 #define RESTITUTION 0.85f
-#define BENCHMARK false
+#define BENCHMARK true
 #define STOP_VELOCITY 4.5f
 
 // Threading //
