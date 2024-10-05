@@ -7,7 +7,7 @@
 #define FLOAT_EPS 1e-8f
 #define GRAVITY -9.8f
 #define AIR_FRICTION 0.0f
-#define FRICTION 0.1f
+#define FRICTION 0.25f
 #define RESTITUTION 0.85f
 #define BENCHMARK true
 #define STOP_VELOCITY 4.5f

@@ -15,10 +15,10 @@ static size_t g_maxParticles;
 float g_curTime(0.0f);
 long long g_curStep(0);
 
-static size_t g_activeParticles;
+static uint32_t g_deadParticles;
 
 // Device Hyperparameters - Constant Space //
-__device__ size_t* d_activeParticles;
+__device__ uint32_t d_deadParticles;
 __constant__ size_t d_maxParticles;
 __constant__ size_t d_numPlanes;
 __constant__ glm::vec3 d_planeP[6];
@@ -31,8 +31,8 @@ cudaEvent_t interKernelStart, interKernelStop, kernel_simStart, kernel_simStop;
 dim3 g_threadsPerBlock(NUM_THREADS);
 dim3 g_blocksPerGrid;
 
-static const int g_timeSampleSz = KERNEL_TIMING_SAMPLESZ;
-static int g_timeSampleCt = 0;
+// static const int g_timeSampleSz = KERNEL_TIMING_SAMPLESZ;
+static size_t g_timeSampleCt = 0;
 static float g_totalKernelTimes = 0.0f;
 
 ParticleData g_particles;
@@ -80,10 +80,8 @@ __device__ glm::vec3 getAcceleration(int idx, glm::vec3* v) {
 __device__ void solveConstraints(int idx, const glm::vec3* pos, const glm::vec3* vel, const float* radii, 
                                  glm::vec3& x_new, glm::vec3& v_new, float& dt, const glm::vec3& a) {
     // Avoid at rest particles
-    if (glm::length(v_new) < 0.25f * STOP_VELOCITY) {
+    if (glm::length(v_new) < STOP_VELOCITY) {
         return;
-    }
-    else {
     }
 
     // Plane Collisions //
@@ -110,22 +108,20 @@ __device__ void solveConstraints(int idx, const glm::vec3* pos, const glm::vec3*
             v_new = (abs(glm::dot(v_collision, n)) * n) + (v_tan);
 
             // Naive jitter handling (could also check to make sure acceleration opposite to normal)
+            // TODO: add more thorough check for stopping to determine convergence
             if (abs(glm::dot(v_new, n)) < STOP_VELOCITY) {
                 v_new = v_tan;
             }
         }
     }
 
-    return;
-
     // If |v_idx| < STOP_VELOCITY we can assume a particle has "converged", and we should reduce the counter.
     // this works because each particle has a significant nonzero initial velocity. Also, we can use |v_idx|2 norm
-    // if (glm::dot(v_new, v_new) < STOP_VELOCITY) {
-        // No size_t atomic add, we can cast to an unsigned long long int which is an upper bound
-        // This should work? (this: https://stackoverflow.com/questions/68328427/subtract-one-from-unsigned-long-long-variable-in-atomic-operation-in-cuda-kernel)
-        // atomicAdd(reinterpret_cast<unsigned long long int*>(d_activeParticles), (unsigned long long int)(-1LL));
-        // printf("active particles = %d\n", d_activeParticles);
-    // }
+    if (glm::length(v_new) < STOP_VELOCITY) {
+        // printf("Adding because v_new = \n");
+        // printvec3(v_new);
+        atomicAdd(&d_deadParticles, 1);
+    }
 }
 
 __global__ void simulateKernel(glm::vec3* positions, glm::vec3* velocities, float* radii) {
@@ -146,7 +142,6 @@ __global__ void simulateKernel(glm::vec3* positions, glm::vec3* velocities, floa
     while (max_iter && dt_remaining > 0.0f) {
         const glm::vec3& x_cur(positions[idx]), v_cur(velocities[idx]);
         glm::vec3 a = getAcceleration(idx, velocities);
-        a *= 0.0f;
 
         // Integrate over timestep to update
         glm::vec3 x_new = x_cur + (v_cur * dt);
@@ -167,7 +162,7 @@ __global__ void simulateKernel(glm::vec3* positions, glm::vec3* velocities, floa
 
 // Exists solely to check convergence
 __global__ void hasConvergedKernel(cudaEvent_t* hasConverged) {
-    if (d_activeParticles == 0) {
+    if (d_deadParticles == 0) {
         cudaEventRecord(*hasConverged, 0);
     }
 }
@@ -194,23 +189,22 @@ void launchSimulateKernel() {
     simulateKernel<<<g_blocksPerGrid, g_threadsPerBlock>>>(g_particles.d_position, g_particles.d_velocity, g_particles.d_radii);
     gpuErrchk(cudaEventRecord(kernel_simStop, 0));
     gpuErrchk(cudaEventSynchronize(kernel_simStop));
-
+    
     // TODO: Find a way to use events to avoid this memcpy, also add timing to this
-    // gpuErrchk(cudaMemcpy(&g_activeParticles, d_activeParticles, sizeof(size_t), cudaMemcpyDeviceToHost));
-    glm::vec3 posbuf;
-    gpuErrchk(cudaMemcpy(&posbuf, g_particles.d_velocity, sizeof(glm::vec3), cudaMemcpyDeviceToHost));
-    if (ctr % 20000 == 0) {
-        cout << posbuf.x << " " << posbuf.y << " " << posbuf.z << endl;
-    }
-    ctr--;
+    // glm::vec3 posbuf;
+    gpuErrchk(cudaMemcpyFromSymbol(&g_deadParticles, d_deadParticles, sizeof(uint32_t), 0, cudaMemcpyDeviceToHost));
+    // gpuErrchk(cudaMemcpy(&posbuf, g_particles.d_position, sizeof(glm::vec3), cudaMemcpyDeviceToHost));
+    // if (ctr % 1 == 0) {
+    //     printvec3(posbuf);
+    //     cout << g_activeParticles << endl;
+    // }
+    // ctr--;
  
     float elapsed;
     gpuErrchk(cudaEventElapsedTime(&elapsed, kernel_simStart, kernel_simStop));
 
-    if (g_timeSampleCt < g_timeSampleSz) {
-        g_totalKernelTimes += elapsed;
-        g_timeSampleCt++;
-    }
+    g_totalKernelTimes += elapsed;
+    g_timeSampleCt++;
 
     gpuErrchk(cudaGetLastError());
 }
@@ -222,9 +216,9 @@ int main(int argc, char**argv) {
     }
 
     g_maxParticles = stoi(argv[1]);
-    g_activeParticles = g_maxParticles;
-    // gpuErrchk(cudaMalloc(&d_activeParticles, sizeof(size_t)));
-    // gpuErrchk(cudaMemcpy(d_activeParticles, &g_activeParticles, sizeof(size_t), cudaMemcpyHostToDevice));
+
+    g_deadParticles = 0;
+    gpuErrchk(cudaMemcpyToSymbol(d_deadParticles, &g_deadParticles, sizeof(unsigned int)));
 
     // Initialize planes, particles, cuda buffers
     init();
@@ -233,39 +227,25 @@ int main(int argc, char**argv) {
     auto start = std::chrono::high_resolution_clock::now();
     auto end = start + std::chrono::seconds(MAX_SIMULATE_TIME_SECONDS);
     
-    cudaEvent_t convergence;
-    cudaEventCreate(&convergence);
-
-    while ((std::chrono::high_resolution_clock::now() < end) && (g_activeParticles > 0)) {
+    while ((std::chrono::high_resolution_clock::now() < end) && (g_deadParticles < g_maxParticles)) {
         launchSimulateKernel();
-
-        // hasConvergedKernel<<<1, 1>>>(&convergence);
-
-        // if (cudaEventQuery(convergence) == cudaSuccess) {
-        //     printf("Converged, breaking\n");
-        //     break;
-        // }
     }
 
     // Convergence time
     auto conv_time = std::chrono::high_resolution_clock::now() - start;
     auto conv_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(conv_time).count();
-    printf("Actual program time (ms): %ld\n", conv_time_ms);
+    printf("Actual program time: %ld ms\n", conv_time_ms);
 
     // Print Timings //
     if (BENCHMARK) {
-        if (g_timeSampleCt >= g_timeSampleSz) {
             float overall = g_totalKernelTimes;
-            float avg = g_totalKernelTimes / g_timeSampleSz;
+            float avg = g_totalKernelTimes / g_timeSampleCt;
             float usage = g_totalKernelTimes / (conv_time_ms);
 
-            printf("Overall Kernel Time Out of 15 second \"convergence\" period: %f ms\n", overall);
-            printf("Average Kernel Time over %d samples: %f ms\n", g_timeSampleSz, avg);
-            printf("Kernel Usage (overall kernel time / total program time): %f\n", usage);
-        }
-        else {
-            printf("Not enough time to reach %d samples, perhaps run longer for \"convergence\"\n?", g_timeSampleSz);
-        }
+            printf("Number of threads: %d, number of blocks: %d, blocks per grid: %d\n", NUM_THREADS, NUM_BLOCKS, g_blocksPerGrid);
+            printf("Average simulateKernel() execution time over %d samples: %f ms\n", g_timeSampleCt, avg);
+            printf("Overall kernel time before convergence: %f ms\n", overall);
+            printf("Kernel time / total program time: %f\n", usage);
     }
 
     // CUDA Cleanup //
@@ -273,8 +253,6 @@ int main(int argc, char**argv) {
     cudaEventDestroy(interKernelStop);
     cudaEventDestroy(kernel_simStart);
     cudaEventDestroy(kernel_simStop);
-
-    cudaEventDestroy(convergence);
 
     return 0;
 }
