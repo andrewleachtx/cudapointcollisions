@@ -16,12 +16,14 @@ float g_curTime(0.0f);
 long long g_curStep(0);
 
 // Device Hyperparameters - Constant Space //
+__device__ size_t d_activeParticles;
 __constant__ size_t d_maxParticles;
 __constant__ size_t d_numPlanes;
 __constant__ glm::vec3 d_planeP[6];
 __constant__ glm::vec3 d_planeN[6];
 
-bool g_is_simFrozen(true);
+bool g_is_simFrozen(false);
+cudaEvent_t interKernelStart, interKernelStop, intraKernelStart, intraKernelStop;
 
 ParticleData g_particles;
 PlaneData g_planes;
@@ -31,6 +33,10 @@ static void init() {
 
     // CUDA //
         gpuErrchk(cudaSetDevice(0));
+        cudaEventCreate(&intraKernelStart);
+        cudaEventCreate(&intraKernelStop);
+        cudaEventCreate(&interKernelStart);
+        cudaEventCreate(&interKernelStop);
 
     // Planes //
         const float plane_width = 540.0f;
@@ -60,11 +66,18 @@ __device__ glm::vec3 getAcceleration(int idx, glm::vec3* v) {
 
 __device__ void solveConstraints(int idx, const glm::vec3* pos, const glm::vec3* vel, const float* radii, 
                                  glm::vec3& x_new, glm::vec3& v_new, float& dt, const glm::vec3& a) {
+    // Avoid at rest particles
+    // if (glm::dot(v_new, v_new) < 0.25f * STOP_VELOCITY) {
+    //     return;
+    // }
+
+    // Grab position and velocity
+    const glm::vec3& x(pos[idx]), v(vel[idx]);
+    
     // Plane Collisions //
     for (int i = 0; i < d_numPlanes; i++) {
         // TODO: Move plane_p and plane_n to constant space
         const glm::vec3& p(d_planeP[i]), n(d_planeN[i]);
-        const glm::vec3& x(pos[idx]), v(vel[idx]);
 
         glm::vec3 new_p = p + (radii[idx] * n);
 
@@ -90,6 +103,12 @@ __device__ void solveConstraints(int idx, const glm::vec3* pos, const glm::vec3*
             }
         }
     }
+
+    // If |v_idx| < STOP_VELOCITY we can assume a particle has "converged", and we should reduce the counter.
+    // this works because each particle has a significant nonzero initial velocity. Also, we can use |v_idx|2 norm
+    // if (glm::dot(v_new, v_new) < 0.25f * STOP_VELOCITY) {
+    //     atomicSub(&d_activeParticles, 1)
+    // }
 }
 
 __global__ void simulateKernel(glm::vec3* positions, glm::vec3* velocities, float* radii) {
@@ -132,6 +151,11 @@ static const int g_timeSampleSz = 50;
 static int g_timeSampleCt = 0;
 static float g_totalKernelTimes = 0.0f;
 
+// Start with arbitrary sizes, optimize later
+dim3 threadsPerBlock(NUM_THREADS);
+size_t problem_sz = g_particles.h_maxParticles;
+dim3 blocksPerGrid((problem_sz + threadsPerBlock.x - 1) / threadsPerBlock.x);
+
 void launchSimulateKernel() {
     /*
         Hierarchically, there is a grid composed of multiple thread blocks
@@ -147,12 +171,19 @@ void launchSimulateKernel() {
         https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#occupancy-calculator
     */
 
-    // Start with arbitrary sizes, optimize later
-    dim3 threadsPerBlock(NUM_THREADS);
-    size_t problem_sz = g_particles.h_maxParticles;
-    dim3 blocksPerGrid((problem_sz + threadsPerBlock.x - 1) / threadsPerBlock.x);
-    
+    // https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#elapsed-time
+    gpuErrchk(cudaEventRecord(intraKernelStart, 0));
     simulateKernel<<<blocksPerGrid, threadsPerBlock>>>(g_particles.d_position, g_particles.d_velocity, g_particles.d_radii);
+    gpuErrchk(cudaEventRecord(intraKernelStop, 0));
+    gpuErrchk(cudaEventSynchronize(intraKernelStop));
+
+    float elapsed;
+    gpuErrchk(cudaEventElapsedTime(&elapsed, intraKernelStart, intraKernelStop));
+
+    if (g_timeSampleCt < g_timeSampleSz) {
+        g_totalKernelTimes += elapsed;
+        g_timeSampleCt++;
+    }
 
     gpuErrchk(cudaGetLastError());
 }
@@ -168,9 +199,9 @@ int main(int argc, char**argv) {
     // Initialize planes, particles, cuda buffers
     init();
 
-    // The renderFrozen variable is important, as it is flipped on window resize
+    // Program "converges" at 15 seconds.
     auto start = std::chrono::high_resolution_clock::now();
-    auto end = start + std::chrono::seconds(10);
+    auto end = start + std::chrono::seconds(15);
 
     while (std::chrono::high_resolution_clock::now() < end) {
         if (!g_is_simFrozen) {
@@ -181,15 +212,19 @@ int main(int argc, char**argv) {
     // Print Timings //
     if (BENCHMARK) {
         if (g_timeSampleCt >= g_timeSampleSz) {
-            cout << "Average Kernel Time: " << g_totalKernelTimes / g_timeSampleSz << "ms" << endl;
-            cout << "g_TimeSampleCt = " << g_timeSampleCt << endl;
+            printf("Overall Kernel Time Out of 15 second \"convergence\" period: %f ms\n", g_totalKernelTimes);
+            printf("Average Kernel Time over %d samples: %f ms\n", g_timeSampleSz, (g_totalKernelTimes / g_timeSampleSz));
         }
         else {
-            cout << "g_timeSampleCt = " << g_timeSampleCt << endl;
+            printf("Not enough time to reach %d samples, perhaps run longer for \"convergence\"\n?", g_timeSampleSz);
         }
     }
 
     // CUDA Cleanup //
+    cudaEventDestroy(interKernelStart);
+    cudaEventDestroy(interKernelStop);
+    cudaEventDestroy(intraKernelStart);
+    cudaEventDestroy(intraKernelStop);
 
     return 0;
 }

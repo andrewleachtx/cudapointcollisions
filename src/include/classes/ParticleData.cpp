@@ -11,6 +11,9 @@ using glm::vec3, glm::vec4;
 // Grabs from main.cu
 extern __constant__ size_t d_maxParticles;
 
+// FIXME: https://stackoverflow.com/questions/68328427/subtract-one-from-unsigned-long-long-variable-in-atomic-operation-in-cuda-kernel
+// extern __constant__ size_t d_activeParticles;
+
 __host__ __device__ ParticleData::ParticleData() : h_maxParticles(0) {
     d_position = nullptr;
     d_velocity = nullptr;
@@ -55,6 +58,8 @@ __host__ __device__ ParticleData::~ParticleData() {
 // Copies physics data from host to device (this should happen only once!)
 __host__ __device__ void ParticleData::copyToDevice() {
     gpuErrchk(cudaMemcpyToSymbol(&d_maxParticles, &h_maxParticles, sizeof(size_t)));
+    // FIXME:
+    // gpuErrchk(cudaMemcpyToSymbol(&d_activeParticles, &h_maxParticles, sizeof(size_t)));
 
     gpuErrchk(cudaMemcpy(d_position, h_position.data(), h_maxParticles * sizeof(vec3), cudaMemcpyHostToDevice));
     gpuErrchk(cudaMemcpy(d_velocity, h_velocity.data(), h_maxParticles * sizeof(vec3), cudaMemcpyHostToDevice));
