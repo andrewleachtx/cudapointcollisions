@@ -6,7 +6,7 @@ particle_sizes=(1 100 1000 100000 1000000 10000000 50000000 100000000 500000000 
 timestamp_hash=$(date +%s)
 output_dir="./results/cout"
 mkdir -p $output_dir
-output_file="${outputdir}/result_${timestamp_hash}.txt"
+output_file="${output_dir}/result_${timestamp_hash}.txt"
 
 # for i in "${array[@]}"
 for n in "${particle_sizes[@]}"

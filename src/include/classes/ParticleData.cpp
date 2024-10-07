@@ -83,7 +83,7 @@ void ParticleData::init(const float& radius) {
     }
 
     h_velocity.resize(h_maxParticles);
-    float push = 120.0f;
+    float push = 90.0f;
     for (vec3& v : h_velocity) {
         float rand_x = dist_vel(gen);
         float rand_y = dist_vel(gen);

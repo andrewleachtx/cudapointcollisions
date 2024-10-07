@@ -25,4 +25,5 @@ to `~/.profile` and `source ~/.bashrc`. To know it works, run `nvcc --version`.
    1. `atomicSub` with a global counter (i.e. `d_activeParticles`) is an option to determine true convergence time, but these operations are limited to `unsigned int` which is smaller than `size_t`, and I didn't want to differ the simulation code from the initial rendered portion which proved its functionality.
    2. It is probably possible to create an atomicSubSize_t, as I have seen user-made "`atomicSubFloat`" functions online.
    3. This **15 second period** means "total kernel time" is really out of 15 seconds, or 15000 ms. In that sense, the `kernel time / 15000` is a better predictor of kernel usage when comparing relatively.
-2. 
+2. The original timestep (`#define DT_SIMULATION (1.0f / 20.0f)`) was updated to `(1 / 60.0f)` or once every second. That is a pretty smooth DT value.
+   1. Regarding the speed at which the simulation "converges" even for `n=1` that is a subjective rate based on my modeling.

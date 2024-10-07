@@ -25,7 +25,7 @@ __constant__ glm::vec3 d_planeP[6];
 __constant__ glm::vec3 d_planeN[6];
 
 bool g_is_simFrozen(false);
-cudaEvent_t interKernelStart, interKernelStop, kernel_simStart, kernel_simStop;
+cudaEvent_t kernel_simStart, kernel_simStop;
 
 // Start with arbitrary sizes, optimize later
 dim3 g_threadsPerBlock(NUM_THREADS);
@@ -45,8 +45,6 @@ static void init() {
         gpuErrchk(cudaSetDevice(0));
         cudaEventCreate(&kernel_simStart);
         cudaEventCreate(&kernel_simStop);
-        cudaEventCreate(&interKernelStart);
-        cudaEventCreate(&interKernelStop);
 
     // Planes //
         const float plane_width = 540.0f;
@@ -60,7 +58,7 @@ static void init() {
         g_particles.copyToDevice();
 
     size_t problem_sz = g_particles.h_maxParticles;
-    dim3 blocksPerGrid = (problem_sz + g_threadsPerBlock.x - 1) / g_threadsPerBlock.x;
+    g_blocksPerGrid = (problem_sz + g_threadsPerBlock.x - 1) / g_threadsPerBlock.x;
 }
 
 /*
@@ -160,13 +158,6 @@ __global__ void simulateKernel(glm::vec3* positions, glm::vec3* velocities, floa
     }
 }
 
-// Exists solely to check convergence
-__global__ void hasConvergedKernel(cudaEvent_t* hasConverged) {
-    if (d_deadParticles == 0) {
-        cudaEventRecord(*hasConverged, 0);
-    }
-}
-
 long long ctr=10e9;
 
 void launchSimulateKernel() {
@@ -190,13 +181,14 @@ void launchSimulateKernel() {
     gpuErrchk(cudaEventRecord(kernel_simStop, 0));
     gpuErrchk(cudaEventSynchronize(kernel_simStop));
     
-    // TODO: Find a way to use events to avoid this memcpy, also add timing to this
-    // glm::vec3 posbuf;
+    // TODO: Potentially add an event to avoid the constant memcpy.
     gpuErrchk(cudaMemcpyFromSymbol(&g_deadParticles, d_deadParticles, sizeof(uint32_t), 0, cudaMemcpyDeviceToHost));
-    // gpuErrchk(cudaMemcpy(&posbuf, g_particles.d_position, sizeof(glm::vec3), cudaMemcpyDeviceToHost));
+
+    glm::vec3 posbuf;
+    gpuErrchk(cudaMemcpy(&posbuf, g_particles.d_position, sizeof(glm::vec3), cudaMemcpyDeviceToHost));
     // if (ctr % 1 == 0) {
-    //     printvec3(posbuf);
-    //     cout << g_activeParticles << endl;
+        // printvec3(posbuf);
+        // cout << g_activeParticles << endl;
     // }
     // ctr--;
  
@@ -238,19 +230,17 @@ int main(int argc, char**argv) {
 
     // Print Timings //
     if (BENCHMARK) {
-            float overall = g_totalKernelTimes;
-            float avg = g_totalKernelTimes / g_timeSampleCt;
-            float usage = g_totalKernelTimes / (conv_time_ms);
+        float overall = g_totalKernelTimes;
+        float avg = g_totalKernelTimes / g_timeSampleCt;
+        float usage = g_totalKernelTimes / (conv_time_ms);
 
-            printf("Number of threads: %d, number of blocks: %d, blocks per grid: %d\n", NUM_THREADS, NUM_BLOCKS, g_blocksPerGrid);
-            printf("Average simulateKernel() execution time over %d samples: %f ms\n", g_timeSampleCt, avg);
-            printf("Overall kernel time before convergence: %f ms\n", overall);
-            printf("Kernel time / total program time: %f\n", usage);
+        printf("Number of threads: %d, number of blocks: %d, blocks per grid: %d\n", NUM_THREADS, NUM_BLOCKS, g_blocksPerGrid);
+        printf("Average simulateKernel() execution time over %d samples: %f ms\n", g_timeSampleCt, avg);
+        printf("Overall kernel time before convergence: %f ms\n", overall);
+        printf("Kernel time / total program time: %f\n", usage);
     }
 
     // CUDA Cleanup //
-    cudaEventDestroy(interKernelStart);
-    cudaEventDestroy(interKernelStop);
     cudaEventDestroy(kernel_simStart);
     cudaEventDestroy(kernel_simStop);
 
