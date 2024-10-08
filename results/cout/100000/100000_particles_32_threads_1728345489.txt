@@ -1,0 +1,9 @@
+---------------------------
+Running with 100000 Particles and 32 Threads per block:
+Allocating 2800000 of 25393692672 bytes on device
+Actual program time: 129 ms
+Number of threads: 32, number of blocks (per grid): 1, blocks per grid: 3125
+Average simulateKernel() execution time over 5286 samples: 0.016809 ms
+Overall kernel time before convergence: 88.852234 ms
+Kernel time / total program time: 0.688777
+Finished running with 100000 Particles and 32 Threads per block

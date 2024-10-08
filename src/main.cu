@@ -28,7 +28,7 @@ bool g_is_simFrozen(false);
 cudaEvent_t kernel_simStart, kernel_simStop;
 
 // Start with arbitrary sizes, optimize later
-dim3 g_threadsPerBlock(NUM_THREADS);
+dim3 g_threadsPerBlock;
 dim3 g_blocksPerGrid;
 
 // static const int g_timeSampleSz = KERNEL_TIMING_SAMPLESZ;
@@ -58,7 +58,7 @@ static void init() {
         g_particles.copyToDevice();
 
     size_t problem_sz = g_particles.h_maxParticles;
-    g_blocksPerGrid = (problem_sz + g_threadsPerBlock.x - 1) / g_threadsPerBlock.x;
+    g_blocksPerGrid = dim3((problem_sz + g_threadsPerBlock.x - 1) / g_threadsPerBlock.x);
 }
 
 /*
@@ -77,7 +77,7 @@ __device__ glm::vec3 getAcceleration(int idx, glm::vec3* v) {
 
 __device__ void solveConstraints(int idx, const glm::vec3* pos, const glm::vec3* vel, const float* radii, 
                                  glm::vec3& x_new, glm::vec3& v_new, float& dt, const glm::vec3& a) {
-    // Avoid at rest particles
+    // Avoid at rest particles otherwise our counter will be inaccurate
     if (glm::length(v_new) < STOP_VELOCITY) {
         return;
     }
@@ -105,8 +105,7 @@ __device__ void solveConstraints(int idx, const glm::vec3* pos, const glm::vec3*
             x_new = x_collision;
             v_new = (abs(glm::dot(v_collision, n)) * n) + (v_tan);
 
-            // Naive jitter handling (could also check to make sure acceleration opposite to normal)
-            // TODO: add more thorough check for stopping to determine convergence
+            // Because behavior is pretty standard, naive jitter handling is okay here. Two more checks are possible.
             if (abs(glm::dot(v_new, n)) < STOP_VELOCITY) {
                 v_new = v_tan;
             }
@@ -114,10 +113,8 @@ __device__ void solveConstraints(int idx, const glm::vec3* pos, const glm::vec3*
     }
 
     // If |v_idx| < STOP_VELOCITY we can assume a particle has "converged", and we should reduce the counter.
-    // this works because each particle has a significant nonzero initial velocity. Also, we can use |v_idx|2 norm
+    // this works because each particle has a significant nonzero initial velocity.
     if (glm::length(v_new) < STOP_VELOCITY) {
-        // printf("Adding because v_new = \n");
-        // printvec3(v_new);
         atomicAdd(&d_deadParticles, 1);
     }
 }
@@ -184,8 +181,8 @@ void launchSimulateKernel() {
     // TODO: Potentially add an event to avoid the constant memcpy.
     gpuErrchk(cudaMemcpyFromSymbol(&g_deadParticles, d_deadParticles, sizeof(uint32_t), 0, cudaMemcpyDeviceToHost));
 
-    glm::vec3 posbuf;
-    gpuErrchk(cudaMemcpy(&posbuf, g_particles.d_position, sizeof(glm::vec3), cudaMemcpyDeviceToHost));
+    // glm::vec3 posbuf;
+    // gpuErrchk(cudaMemcpy(&posbuf, g_particles.d_position, sizeof(glm::vec3), cudaMemcpyDeviceToHost));
     // if (ctr % 1 == 0) {
         // printvec3(posbuf);
         // cout << g_activeParticles << endl;
@@ -202,12 +199,14 @@ void launchSimulateKernel() {
 }
 
 int main(int argc, char**argv) {
-    if (argc < 2) {
-        cout << "Usage: ./executable <number of particles>" << endl;
+    if (argc < 3) {
+        cout << "Usage: ./executable <number of particles> <threads per block>" << endl;
         return 0;
     }
 
     g_maxParticles = stoi(argv[1]);
+    int threadsPerBlock = stoi(argv[2]);
+    g_threadsPerBlock = dim3(threadsPerBlock);
 
     g_deadParticles = 0;
     gpuErrchk(cudaMemcpyToSymbol(d_deadParticles, &g_deadParticles, sizeof(unsigned int)));
@@ -234,7 +233,7 @@ int main(int argc, char**argv) {
         float avg = g_totalKernelTimes / g_timeSampleCt;
         float usage = g_totalKernelTimes / (conv_time_ms);
 
-        printf("Number of threads: %d, number of blocks: %d, blocks per grid: %d\n", NUM_THREADS, NUM_BLOCKS, g_blocksPerGrid);
+        printf("Number of threads: %d, number of blocks (per grid): %d\n", g_threadsPerBlock.x, g_blocksPerGrid.x);
         printf("Average simulateKernel() execution time over %d samples: %f ms\n", g_timeSampleCt, avg);
         printf("Overall kernel time before convergence: %f ms\n", overall);
         printf("Kernel time / total program time: %f\n", usage);

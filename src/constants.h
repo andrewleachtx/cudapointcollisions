@@ -14,8 +14,5 @@
 // Arbitrary, but usually we ended up with ~2.5mil
 #define KERNEL_TIMING_SAMPLESZ 1000000
 
-// Threading //
-#define NUM_THREADS 256
-#define NUM_BLOCKS 256
 
 #endif // CONSTANTS_H

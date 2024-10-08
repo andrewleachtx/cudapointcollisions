@@ -49,7 +49,7 @@ __host__ __device__ ParticleData::~ParticleData() {
     //     gpuErrchk(cudaFree(&d_radii));
     // }
 
-    printf("Destructor called %d time(s) for this=%p\n", ++destructorCt, this);
+    // printf("Destructor called %d time(s) for this=%p\n", ++destructorCt, this);
 }
 
 // Copies physics data from host to device (this should happen only once!)
