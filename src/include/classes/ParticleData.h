@@ -19,12 +19,12 @@ using glm::vec3, glm::vec4;
 */
 class ParticleData {
     public:
-        vector<vec3> h_position;
-        vector<vec3> h_velocity;
+        vector<vec4> h_position;
+        vector<vec4> h_velocity;
         vector<float> h_radii;
 
-        vec3* d_position;
-        vec3* d_velocity;
+        vec4* d_position;
+        vec4* d_velocity;
         float* d_radii;
 
         size_t h_maxParticles;

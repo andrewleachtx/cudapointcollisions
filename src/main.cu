@@ -15,10 +15,10 @@ static size_t g_maxParticles;
 float g_curTime(0.0f);
 long long g_curStep(0);
 
-static uint32_t g_deadParticles;
+static unsigned int g_deadParticles;
 
 // Device Hyperparameters - Constant Space //
-__device__ uint32_t d_deadParticles;
+__device__ unsigned int d_deadParticles;
 __constant__ size_t d_maxParticles;
 __constant__ size_t d_numPlanes;
 __constant__ glm::vec3 d_planeP[6];
@@ -66,26 +66,29 @@ static void init() {
 */
 
 // Assume mass is 1; F / 1 = A
-__device__ glm::vec3 getAcceleration(int idx, glm::vec3* v) {
+__device__ glm::vec3 getAcceleration(int idx, glm::vec4* v) {
     float mass = 1.0f;
 
     // Simple force composed of gravity and air resistance
-    glm::vec3 F_total = glm::vec3(0.0f, GRAVITY, 0.0f) - ((AIR_FRICTION / mass) * v[idx]);
+    glm::vec3 F_total = glm::vec3(glm::vec4(0.0f, GRAVITY, 0.0f, 0.0f) - ((AIR_FRICTION / mass) * v[idx]));
 
     return F_total;
 }
 
-__device__ void solveConstraints(int idx, const glm::vec3* pos, const glm::vec3* vel, const float* radii, 
+__device__ void solveConstraints(int idx, const glm::vec4* pos, const glm::vec4* vel, const float* radii, 
                                  glm::vec3& x_new, glm::vec3& v_new, float& dt, const glm::vec3& a) {
     // Avoid at rest particles otherwise our counter will be inaccurate
     if (glm::length(v_new) < STOP_VELOCITY) {
         return;
     }
 
+    // Truncate the w component
+    const glm::vec3& x(pos[idx]), v(vel[idx]);
+
     // Plane Collisions //
     for (int i = 0; i < d_numPlanes; i++) {
         const glm::vec3& p(d_planeP[i]), n(d_planeN[i]);
-        const glm::vec3& x(pos[idx]), v(vel[idx]);
+        // const glm::vec3& x(pos[idx]), v(vel[idx]); // FIXME: UNCOALESCED GLOBAL ACCESS (UNNECESSARY IN LOOP)
 
         glm::vec3 new_p = p + (radii[idx] * n);
 
@@ -119,7 +122,8 @@ __device__ void solveConstraints(int idx, const glm::vec3* pos, const glm::vec3*
     }
 }
 
-__global__ void simulateKernel(glm::vec3* positions, glm::vec3* velocities, float* radii) {
+// FIXME: Generally, this program suffers from warps being allowed 32 bytes, but we are passing in vec3, vec3 or 12 + 12 = 24 bytes. Padding to vec4 could help with this.
+__global__ void simulateKernel(glm::vec4* positions, glm::vec4* velocities, float* radii) {
     /* To retrieve the index in this 1D instance, we do this: */
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     
@@ -133,9 +137,10 @@ __global__ void simulateKernel(glm::vec3* positions, glm::vec3* velocities, floa
     float dt = dt_remaining;
 
     int max_iter = 10;
+    const glm::vec3& x_cur(positions[idx]), v_cur(velocities[idx]);
 
     while (max_iter && dt_remaining > 0.0f) {
-        const glm::vec3& x_cur(positions[idx]), v_cur(velocities[idx]);
+        // const glm::vec3& x_cur(positions[idx]), v_cur(velocities[idx]); // FIXME: UNCOALESCED GLOBAL ACCESS
         glm::vec3 a = getAcceleration(idx, velocities);
 
         // Integrate over timestep to update
@@ -146,8 +151,8 @@ __global__ void simulateKernel(glm::vec3* positions, glm::vec3* velocities, floa
         solveConstraints(idx, positions, velocities, radii, x_new, v_new, dt, a);
 
         // Update particle state
-        positions[idx] = x_new;
-        velocities[idx] = v_new;
+        positions[idx] = glm::vec4(x_new, 0.0f); // FIXME: UNCOALESCED GLOBAL ACCESS
+        velocities[idx] = glm::vec4(v_new, 0.0f); // FIXME: UNCOALESCED GLOBAL ACCESS
 
         // Update remaining time
         dt_remaining -= dt;
@@ -179,7 +184,7 @@ void launchSimulateKernel() {
     gpuErrchk(cudaEventSynchronize(kernel_simStop));
     
     // TODO: Potentially add an event to avoid the constant memcpy.
-    gpuErrchk(cudaMemcpyFromSymbol(&g_deadParticles, d_deadParticles, sizeof(uint32_t), 0, cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpyFromSymbol(&g_deadParticles, d_deadParticles, sizeof(unsigned int), 0, cudaMemcpyDeviceToHost));
 
     // glm::vec3 posbuf;
     // gpuErrchk(cudaMemcpy(&posbuf, g_particles.d_position, sizeof(glm::vec3), cudaMemcpyDeviceToHost));

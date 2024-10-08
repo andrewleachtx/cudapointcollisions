@@ -13,7 +13,7 @@ cuda-samples/
 *.mp4
 *.mp3
 bench/*.txt
-# *.ncu-rep
+*.ncu-rep
 
 extra/
 build/

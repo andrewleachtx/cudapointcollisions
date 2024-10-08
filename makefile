@@ -9,5 +9,5 @@ clean:
 # https://stackoverflow.com/questions/2214575/passing-arguments-to-make-run
 # routing build output to dev/null
 run:
-	cmake --build build > /dev/null 2>&1
-	./build/CUDAPARTICLESYSTEMS $(n) $(threads)
+	cmake --build build
+	./build/CUDAPOINTCOLLISIONS $(n) $(threads)

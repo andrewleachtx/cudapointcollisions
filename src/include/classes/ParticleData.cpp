@@ -18,7 +18,7 @@ __host__ __device__ ParticleData::ParticleData() : h_maxParticles(0) {
 }
 
 __host__ __device__ ParticleData::ParticleData(size_t max_particles) : h_maxParticles(max_particles) {
-    size_t mem_required = max_particles * (2 * sizeof(vec3) + sizeof(float));
+    size_t mem_required = max_particles * (2 * sizeof(vec4) + sizeof(float));
     size_t free, total;
     cudaMemGetInfo(&free, &total);
 
@@ -32,8 +32,8 @@ __host__ __device__ ParticleData::ParticleData(size_t max_particles) : h_maxPart
         cout << "Allocating " << mem_required << " of " << total << " bytes on device" << endl;
     }
 
-    gpuErrchk(cudaMalloc(&d_position, max_particles * sizeof(vec3)));
-    gpuErrchk(cudaMalloc(&d_velocity, max_particles * sizeof(vec3)));
+    gpuErrchk(cudaMalloc(&d_position, max_particles * sizeof(vec4)));
+    gpuErrchk(cudaMalloc(&d_velocity, max_particles * sizeof(vec4)));
     gpuErrchk(cudaMalloc(&d_radii, max_particles * sizeof(float)));
 }
 
@@ -56,8 +56,8 @@ __host__ __device__ ParticleData::~ParticleData() {
 __host__ __device__ void ParticleData::copyToDevice() {
     gpuErrchk(cudaMemcpyToSymbol(&d_maxParticles, &h_maxParticles, sizeof(size_t)));
 
-    gpuErrchk(cudaMemcpy(d_position, h_position.data(), h_maxParticles * sizeof(vec3), cudaMemcpyHostToDevice));
-    gpuErrchk(cudaMemcpy(d_velocity, h_velocity.data(), h_maxParticles * sizeof(vec3), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemcpy(d_position, h_position.data(), h_maxParticles * sizeof(vec4), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemcpy(d_velocity, h_velocity.data(), h_maxParticles * sizeof(vec4), cudaMemcpyHostToDevice));
     gpuErrchk(cudaMemcpy(d_radii, h_radii.data(), h_maxParticles * sizeof(float), cudaMemcpyHostToDevice));
 }
 
@@ -73,23 +73,23 @@ void ParticleData::init(const float& radius) {
     std::uniform_real_distribution<float> dist_pos(minF, maxF);
     std::uniform_real_distribution<float> dist_vel(-1.0f, 1.0f);
 
-    for (vec3& x : h_position) {
+    for (vec4& x : h_position) {
         float rand_x(dist_pos(gen));
         float rand_y(dist_pos(gen));
         float rand_z(dist_pos(gen));
 
-        x = vec3(rand_x - maxF, rand_y + minF, rand_z - maxF);
+        x = vec4(rand_x - maxF, rand_y + minF, rand_z - maxF, 0.0f);
         // cout << x.x << " " << x.y << " " << x.z << endl;
     }
 
     h_velocity.resize(h_maxParticles);
     float push = 90.0f;
-    for (vec3& v : h_velocity) {
+    for (vec4& v : h_velocity) {
         float rand_x = dist_vel(gen);
         float rand_y = dist_vel(gen);
         float rand_z = dist_vel(gen);
 
-        v = vec3(push * rand_x, push * rand_y, push * rand_z);
+        v = vec4(push * rand_x, push * rand_y, push * rand_z, 0.0f);
     }
 
     h_radii.resize(h_maxParticles);

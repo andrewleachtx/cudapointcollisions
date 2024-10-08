@@ -57,6 +57,13 @@ def parse_simulation_file(file_path):
             print(f"Could not find kernel fraction in file: {filename}")
             data['kernel_fraction'] = None
 
+        # Extract memory allocated (updated regex to match "Allocating X of Y bytes on device")
+        try:
+            data['memory_allocated'] = int(re.search(r'Allocating (\d+) of', content).group(1))
+        except AttributeError:
+            print(f"Could not find memory allocated in file: {filename}")
+            data['memory_allocated'] = None
+
     return data
 
 def process_all_files(directory):
@@ -173,8 +180,43 @@ def plotLowestKernelTimes(df):
     plt.savefig("figures/lowest_kernel_times.png")
     plt.show()
 
-# Main execution
-directory = "cout/"  # Specify your directory here
+def plotMemoryAllocatedVsParticles(df):
+    # Sort data by the number of particles
+    df = df.sort_values(by='particles')
+    unique_threads = sorted(df['threads'].unique())
+
+    markers = ['o', 's', '^', 'D', 'v', 'x', 'p', '*', 'h', '+']
+
+    plt.figure(figsize=(10, 6))
+
+    for i, thread in enumerate(unique_threads):
+        # Filter data by thread count
+        subset = df[df['threads'] == thread]
+
+        particle_counts = subset['particles'].unique()
+        x_values = range(len(particle_counts))
+        marker = markers[i % len(markers)]
+
+        plt.plot(x_values, subset['memory_allocated'], marker=marker, linestyle='-', linewidth=2,
+                 alpha=0.7, label=f'{thread} Threads')
+
+    plt.xlabel('Number of Particles', fontsize=14)
+    plt.ylabel('Memory Allocated (Bytes)', fontsize=14)
+    plt.title('Memory Allocated vs Particles by Thread Count', fontsize=16, weight='bold')
+
+    plt.xticks(x_values, particle_counts, rotation=45, fontsize=12)
+
+    plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+
+    # Add a legend and ensure it is sorted by thread count
+    plt.legend(title='Thread Count', fontsize=12, title_fontsize=14)
+
+    plt.tight_layout()
+
+    plt.savefig("figures/memory_allocated_vs_particles_by_thread_count.png")
+    plt.show()
+
+directory = "cout/"
 df = process_all_files(directory)
 
 print(df.head())
@@ -182,3 +224,4 @@ print(df.head())
 plotKernelTimeVsParticles(df)
 plotKernelUsageVsParticles(df)
 plotLowestKernelTimes(df)
+plotMemoryAllocatedVsParticles(df)
