@@ -23,6 +23,7 @@ out/
 *.tar.gz
 linux/
 win32/
+.idea/
 
 assignments/handin/
 submissions/
