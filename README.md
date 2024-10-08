@@ -1,5 +1,5 @@
 # CUDA Point-Plane Collisions
-The goal of this is to maximize the number of particles possible in a physics simulation with 6 plane checks.
+The goal is to maximize particles possible in a physics simulation with 6 plane checks and basic gravity while minimizing kernel and thus convergence time.
 
 # Linux
 ## Dependencies
@@ -18,29 +18,30 @@ to `~/.profile` and `source ~/.bashrc`. To know it works, run `nvcc --version`.
 ## Helpful Commands
 - `cat /etc/os-release` shows the distro and device architecture.
 - `nvidia-smi` provides GPU information (assuming it is a NVIDIA gpu).
-- `ncu --target-processes all -o <report name> <executable> [args]` will generate a compute report over all kernels given some executable and its args. 
+- `ncu --target-processes all -o <report name> <executable> [executable args]` will generate a compute report over all kernels given some executable and its args. 
 
 ## Notes
-1. Benchmarks run on **NVIDIA GeForce RTX 4090** with **CUDA 12.2** 
-2. The program was refactored to correct issue as well as new logic to evaluate until it "converges" with the last particle velocity reaches a nonzero threshold $\approx 0$. This is possible with a cudaMemcpy of `sizeof(uint32_t)`, which is assumed to be a very minimal cost per cycle, and an `atomicAdd` to a counter of "dead particles".
+1. Benchmarks were run on a **NVIDIA GeForce RTX 4090** with **CUDA 12.2**. 
+2. The simulation was refactored to correctly run without rendering and over Linux. New logic was added to iterate until  last particle velocity reaches a nonzero threshold $\approx 0$, which is the point of "convergence". This is possible with a cudaMemcpy of `sizeof(uint32_t)`, which is assumed to be a very minimal cost per cycle, and an `atomicAdd` to a counter of "dead particles".
 3. The original timestep (`#define DT_SIMULATION (1.0f / 20.0f)`) was updated to `(1 / 60.0f)` or once every second. That is a pretty smooth DT value.
-   1. Regarding the speed at which the simulation "converges" even for `n=1` that is a subjective rate based on my modeling.
+   1. Regarding just how quickly the simulation "converges" even for `n=1` - that is a subjective rate based on my modeling, it does render - the base code was stripped of rendering capability.
 4. Thread size and particle size vary and are tested as hyperparameters. Block size is according to the following:
    ```cpp
     size_t problem_sz = g_particles.h_maxParticles;
-    g_blocksPerGrid = (problem_sz + g_threadsPerBlock.x - 1) / g_threadsPerBlock.x;
+    g_blocksPerGrid = dim3((problem_sz + g_threadsPerBlock.x - 1) / g_threadsPerBlock.x);
     ```
-5. `results/cout/{particle count}/...` is where you can find the results for a given particle.
-6. Memory:
-   1. Global Space (~25 GB, of which only ~70 MB is storable in L2 cache)
+5. `test/...` is where many of the .sh scripts were made to iterate over various particle sizes and thread counts.
+   1. The files are labeled in `cout/{particle ct}/`.
+6. GPU Memory:
+   1. Global Memory (~25 GB, of which only ~70 MB is storable in L2 cache)
       1. I am allocating `vec3 pos`, `vec3 vel`, and `float radius`, which is $$2 * sizeof(vec3) + sizeof(float) = 28 \text{ bytes per particle}$$
-      2. The **theoretical limit** to particle allocations on the GPU was just under **1 billion** particles: $$\frac{\text{device memory}}{sizeof(\text{particle})} = \frac{25393692672 \text{ bytes}}{28 \text{ bytes}} \approx 906917595 \text{ particles}$$ That said, out of concern for potential margin of error (and other users...), I made the upper bound `7,500,000` particles. My maximum allocation was **20.4GB**.
+      2. The **theoretical limit** to particle allocations on the GPU was just under **1 billion** particles: $$\frac{\text{device memory}}{sizeof(\text{particle})} = \frac{25393692672 \text{ bytes}}{28 \text{ bytes}} \approx 906917595 \text{ particles}$$ That said, out of concern for potential margin of error (and other users...), I made the upper bound `7,500,000` particles. My maximum particle runtime allocation was **20.4GB**.
       3. There are of course some other overhead allocations, i.e. `d_deadParticles` (isn't ideal for global, but can't be in `__constant__`) either.
-   2. Constant Space (~64 KB, cached in L1)
+   2. Constant Memory (~64 KB, cached in L1)
       1. I allocated 4 `__constant__` members due to their constant nature, and frequent or "hot" use across all particles for collision checks and whatever else. These were `size_t d_maxParticles`, `size_t d_numPlanes`, `vec3 d_planeP[6]`, and `vec3 d_planeN[6]`.
       2. These may seem small, but GPU constant space is very limited, around about **64 KB**.
 7. NCU Concerns
-   1. It is clear that while global accesses are necessary in this case, compute reports **60%** excessive sectors - more memory is transferred than needed by the thread. For example look at this function:
+   1. It is clear that while global accesses are necessary in this case, compute reports "**60%** excessive sectors" - less memory is used than is transferred. For example look at this function:
     
     ```cpp
     __device__ void solveConstraints(int idx, const glm::vec3* pos, const glm::vec3* vel, const float* radii, 
