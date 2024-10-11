@@ -185,14 +185,6 @@ void launchSimulateKernel() {
     
     // TODO: Potentially add an event to avoid the constant memcpy.
     gpuErrchk(cudaMemcpyFromSymbol(&g_deadParticles, d_deadParticles, sizeof(unsigned int), 0, cudaMemcpyDeviceToHost));
-
-    // glm::vec3 posbuf;
-    // gpuErrchk(cudaMemcpy(&posbuf, g_particles.d_position, sizeof(glm::vec3), cudaMemcpyDeviceToHost));
-    // if (ctr % 1 == 0) {
-        // printvec3(posbuf);
-        // cout << g_activeParticles << endl;
-    // }
-    // ctr--;
  
     float elapsed;
     gpuErrchk(cudaEventElapsedTime(&elapsed, kernel_simStart, kernel_simStop));

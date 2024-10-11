@@ -13,8 +13,7 @@ to `~/.profile` and `source ~/.bashrc`. To know it works, run `nvcc --version`.
 
 2. Install GLM somewhere - I added an environment variable `export GLM_INCLUDE_DIR=~/packages/glm` to my `.profile` and got the code from [here](https://github.com/g-truc/glm/tree/master). Feel free to just modify `CMakeLists.txt` to point to your glm installation if its local to the project, or elsewhere.
 3. `CMakeLists.txt` needed to be modified to find the header files in `/usr/` using [this](https://stackoverflow.com/questions/13167598/error-cuda-runtime-h-no-such-file-or-directory/75559127#75559127).
-4. To run `ncu` meaningfully, you need root access. https://developer.nvidia.com/nvidia-development-tools-solutions-err_nvgpuctrperm-permission-issue-performance-counters
-
+   
 ## Helpful Commands
 - `cat /etc/os-release` shows the distro and device architecture.
 - `nvidia-smi` provides GPU information (assuming it is a NVIDIA gpu).
@@ -63,7 +62,7 @@ to `~/.profile` and `source ~/.bashrc`. To know it works, run `nvcc --version`.
     - It is not necessary to make a retrieval from global memory 6 times per plane for the same position.
     - Even though we only ask for 12 bytes of our float3, memory boundaries will chunk global memory into sectors, which are usually ~32 bytes per chunk. The data is then retrieved in sectors, meaning when we ask for pos[0], we are perhaps getting pos[1], and **some** of pos[2].
     - The reason **some** of pos[2] is problematic is that we now have to do an entirely additional fetch for just 4 bytes of pos[2]. Therefore, it is ideal to align your "object" into even chunks of the sector size.
-## Improvements
+## Optimizations
 1. Padding was added, moving `vec3` to `vec4` for both pos and vel. This update brought $sizeof(\text{particle}) = 2 * sizeof(\text{vec4}) + sizeof(\text{float}) = 28$.
    1. This was done due to the uncoalesced global memory access, which was a major bottleneck. The idea was that sector size, at 32 bytes, is better stored with two vec4s, meaning no request would ever need to use another fetch request or cycle to get the necessary memory. 
 2. Any redundant fetches from global memory were refactored
@@ -76,3 +75,10 @@ to `~/.profile` and `source ~/.bashrc`. To know it works, run `nvcc --version`.
 ![Memory Allocations vs Particles](test/results/figures/memory_allocated_vs_particles_by_thread_count.png)
 ![Memory Chart](memory.png)
 ![Uncoalesced Global Memory Access](uncoalesced.png)
+
+## Obstacles
+1. Using a 4090 on an external server required porting of local Windows-compiled and run code, which came with its own set of issues.
+2. To run `ncu` for meaningful results (like the ones showed), you need root access to the performance counters of the GPU. About 4-5 days were spent reaching out and retrieving access the role necessary to run ncu - and after that it was still not possible. https://developer.nvidia.com/nvidia-development-tools-solutions-err_nvgpuctrperm-permission-issue-performance-counters
+   1. The images were generated on a local GPU - while not nearly close to as powerful as a 102 chipset like the 4090, the idea was that by using NSight Compute (ncu) the same bottlenecks and inefficiencies would be identified, just to a lesser degree.
+3. There was a slight overhead to correcting and modifying the code to run on Linux; for example, a CUDA warning to `glm` inline functions was ignored on my Windows system, but it caused `glm` overloads to completely break on Linux, and does not error out.
+   1. I should have read the compiler warnings.
