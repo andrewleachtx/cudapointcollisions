@@ -137,10 +137,11 @@ __global__ void simulateKernel(glm::vec4* positions, glm::vec4* velocities, floa
     float dt = dt_remaining;
 
     int max_iter = 10;
-    const glm::vec3& x_cur(positions[idx]), v_cur(velocities[idx]);
+    // ACTUALLY THIS NEEDS TO BE IN THE LOOP OR ELSE X_NEW = X_CUR IS THE SAME
+    // const glm::vec3& x_cur(positions[idx]), v_cur(velocities[idx]);
 
     while (max_iter && dt_remaining > 0.0f) {
-        // const glm::vec3& x_cur(positions[idx]), v_cur(velocities[idx]); // FIXME: UNCOALESCED GLOBAL ACCESS
+        const glm::vec3& x_cur(positions[idx]), v_cur(velocities[idx]); // FIXME: UNCOALESCED GLOBAL ACCESS
         glm::vec3 a = getAcceleration(idx, velocities);
 
         // Integrate over timestep to update
