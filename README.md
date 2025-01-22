@@ -36,7 +36,7 @@ to `~/.profile` and `source ~/.bashrc`. To know it works, run `nvcc --version`.
       1. I am allocating `vec3 pos`, `vec3 vel`, and `float radius`, which is $$2 * sizeof(vec3) + sizeof(float) = 28 \text{ bytes per particle}$$
       2. The **theoretical limit** to particle allocations on the GPU was just under **1 billion** particles: $$\frac{\text{device memory}}{sizeof(\text{particle})} = \frac{25393692672 \text{ bytes}}{28 \text{ bytes}} \approx 906917595 \text{ particles}$$ That said, out of concern for potential margin of error (and other users...), I made the upper bound `7,500,000` particles. My maximum particle runtime allocation was **20.4GB**.
       3. There are of course some other overhead allocations, i.e. `d_deadParticles` (isn't ideal for global, but can't be in `__constant__`) either.
-   2. Constant Memory (~64 KB, cached in L1)
+   2. Constant Memory (~64 KB, cached in L2)
       1. I allocated 4 `__constant__` members due to their constant nature, and frequent or "hot" use across all particles for collision checks and whatever else. These were `size_t d_maxParticles`, `size_t d_numPlanes`, `vec3 d_planeP[6]`, and `vec3 d_planeN[6]`.
       2. These may seem small, but GPU constant space is very limited, around about **64 KB**.
 7. NCU Concerns
